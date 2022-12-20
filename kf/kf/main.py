@@ -1,4 +1,6 @@
 import rclpy
+import signal
+import sys
 from rclpy.node import Node
 from std_msgs.msg import String
 from sensor_msgs.msg import Imu
@@ -15,7 +17,7 @@ class KF(Node):
         super().__init__('kf')
         self.imu_msg = None
         self.odom_msg = None
-        # we get imu at 200Hz but JointState at 30Hz
+        # we get imu at 200Hz but odom at 30Hz
         # we decide to run KF at 20 Hz to be conservative
         self.imu_sub = self.create_subscription(
             Imu,
@@ -42,8 +44,12 @@ class KF(Node):
         assert self.B.shape == (5,3)
         self.C = np.matrix([[1,0,0,0,0],[0,1,0,0,0],[0,0,0,0,1]])
         assert self.C.shape == (3,5)
-        self.Q = np.eye(5)*100 # younes todo use proper covariance matrices
+        # This is gotten from the IMU msg
+        Qa = np.diag([0.000289,0.000289,4e-8])
+        assert Qa.shape == (3,3)
+        self.Q = self.B@Qa@self.B.transpose()
         assert self.Q.shape == (5,5)
+        # this convar is gotten from odom msg
         self.R = np.diag([1e-5,1e-5,0.001])
         assert self.R.shape == (3,3)
         self.x_hat = np.zeros((5,1))
@@ -77,7 +83,6 @@ class KF(Node):
         # planar robot only turns in z
         #assert math.isclose(self.imu_msg.angular_velocity.x,0,abs_tol=1e-2)
         #assert math.isclose(self.imu_msg.angular_velocity.y,0,abs_tol=1e-2)
-        # younes todo really should be using tf to transform accel from imu to odom frame
         ax = self.imu_msg.linear_acceleration.x
         ay = self.imu_msg.linear_acceleration.y
         az = self.imu_msg.linear_acceleration.z
@@ -166,7 +171,6 @@ class KF(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-
     kf = KF()
     rclpy.spin(kf)
 
